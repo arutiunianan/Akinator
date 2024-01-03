@@ -23,6 +23,7 @@ void TreeDtor( Tree* tree)
 
     tree->root = NULL;
     tree->size = DEAD_SIZE;
+    fclose( tree->log );
 }
 
 int NodeDtor( Node* node)
@@ -30,7 +31,6 @@ int NodeDtor( Node* node)
     if( node == NULL )
         return 1;
     
-    //node->parent = NULL;
     if( node->left  != NULL ) 
         NodeDtor( node->left );
     if( node->right != NULL ) 

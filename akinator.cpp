@@ -1,6 +1,6 @@
 #include "akinator.h"
 
-int GetFileSize(FILE* text, int start)
+int GetFileSize( FILE* text, int start )
 {
     assert( text != NULL );
     fseek( text, 0, SEEK_END );
@@ -9,130 +9,186 @@ int GetFileSize(FILE* text, int start)
     return fileSize;
 }
 
-void GetString( char* buffer, char** str, int fileSize, int* i, int start)
+void GetString( Akin* akin, char** str, int* i, int start )
 {
+    assert( akin );
+
     if ( start < 0 )
-        return; //ошибка
+    {
+        akin->errors |= POINTER_OF_BUF_IS_NEGATIVE;
+        return; 
+    }
     int end = start;
 
-    if( buffer[*i] == '<' )
+    if( akin->buffer[*i] == '<' )
     {
-        while( buffer[*i] != '>' )
+        while( akin->buffer[*i] != '>' )
         {
             end = *i;
             (*i)++;
         
-            if( *i >= fileSize )
-                return; //ошибка
+            if( *i >= akin->file_size )
+            {
+                akin->errors |= INCORRECT_FILE_DATA;
+                return; 
+            }
         }
         (*i)++;
         *str = ( char* )calloc( end - start + 1, sizeof( char ) );
-        strncpy( *str, buffer + start + 1, end - start  );
+        strncpy( *str, akin->buffer + start + 1, end - start  );
     }
-    
 }
 
-void InviteStrNode( Tree* tree, Node* node, int fileSize, char* buffer, int* i, int* bracket_counter, WhichChild side )
+void InviteStrNode( Akin* akin, Node* node, int* i, int* bracket_counter, WhichChild side )
 {
+    assert( akin );
+
+    if( !node )
+    {
+        akin->tree->errors |= NODE_PTR_IS_NULL;
+        return; 
+    }
     int is_root = 0;
-    while( buffer[*i] == ' ' ) (*i)++;
-    if( buffer[*i] == '(' )
+    while( akin->buffer[*i] == ' ' ) (*i)++;
+    if( akin->buffer[*i] == '(' )
     {
         (*bracket_counter)++;
         (*i)++;
         is_root++;
     }
 
-    while( buffer[*i] == ' ' ) (*i)++;
+    while( akin->buffer[*i] == ' ' ) (*i)++;
     char* str = "";
-    GetString( buffer, &str, fileSize, i, *i );
-    //printf("%s %d %d\n",str,*i,side);
+    GetString( akin, &str, i, *i );
 
     if( strcmp( str, "nil" ) )
-        InviteNode( tree, node, side, str );
+        InviteNode( akin->tree, node, side, str );
     if(side == Left && is_root )
-      ReadingNodes( tree, node->left, fileSize, buffer, i, bracket_counter );
-    else if(side == Right && is_root)
-      ReadingNodes( tree, node->right, fileSize, buffer, i, bracket_counter );
-
+      ReadingNodes( akin, node->left, i, bracket_counter );
+    else if( side == Right && is_root )
+      ReadingNodes( akin, node->right, i, bracket_counter );
 }
 
-void ReadingNodes( Tree* tree, Node* node, int fileSize, char* buffer, int* i, int* bracket_counter )
+void ReadingNodes( Akin* akin, Node* node, int* i, int* bracket_counter )
 {
+    assert( akin );
 
-    InviteStrNode( tree, node, fileSize, buffer,i, bracket_counter, Left );
-        
-    InviteStrNode( tree, node, fileSize, buffer,i, bracket_counter, Right );
+    if( !node )
+    {
+        akin->tree->errors |= NODE_PTR_IS_NULL;
+        return; 
+    }
 
-    while( buffer[*i] == ' ' ) (*i)++;
-    if( buffer[*i] == ')' )
+    InviteStrNode( akin, node, i, bracket_counter, Left );
+    InviteStrNode( akin, node, i, bracket_counter, Right );
+
+    while( akin->buffer[*i] == ' ' ) (*i)++;
+    if( akin->buffer[*i] == ')' )
         (*bracket_counter)--;
-    else 
-        return; //ошибка
+    else
+    {
+        akin->errors |= INCORRECT_FILE_DATA;
+        return;
+    }
     (*i)++;
 }
 
-void ReadFile( Tree* tree , const char* prefile)
+void ReadFile( Akin* akin )
 {
-    FILE* file = fopen( prefile, "r" );
-    int fileSize = GetFileSize( file, SEEK_SET );
-    char* buffer = ( char* )calloc( fileSize + 1, sizeof( char ) );
-    fread( buffer, sizeof( char ), fileSize, file );
+    assert( akin );
+
+    akin->file_size = GetFileSize( akin->input, SEEK_SET );
+    if( akin->file_size < 1 )
+    {
+        akin->errors |= FILESIZE_IS_ZERO;
+        return;
+    } 
+    akin->buffer = ( char* )calloc( akin->file_size + 1, sizeof( char ) );
+    fread( akin->buffer, sizeof( char ), akin->file_size, akin->input );
 
     int bracket_counter = 0;
     int i = 0;
-    while( buffer[i] != '(' )
+    while( akin->buffer[i] != '(' )
     {
-        if( buffer[i] != ' ' )
-            return; //ошибка типо
+        if( akin->buffer[i] != ' ' )
+        {
+            akin->errors |= INCORRECT_FILE_DATA;
+            return;
+        }  
         i++;
     }
     bracket_counter++;;
     i++;
-    while( buffer[i] == ' ' ) i++;
+    while( akin->buffer[i] == ' ' ) i++;
 
     char* str = "";
-    GetString( buffer, &str, fileSize, &i, i );
-    InviteNode( tree, tree->root, Right, str );
+    GetString( akin, &str, &i, i );
+    InviteNode( akin->tree, akin->tree->root, Right, str );
 
-    ReadingNodes( tree, tree->root ,fileSize, buffer, &i, &bracket_counter );
-    
+    ReadingNodes( akin, akin->tree->root, &i, &bracket_counter );
 }
 
-void WriteFile( Node* node, FILE* file )
+void WriteFile( Akin* akin, Node* node, FILE* file )
 {
-    
+    assert( akin );
+
+    if( !node )
+    {
+        akin->tree->errors |= NODE_PTR_IS_NULL;
+        return;
+    } 
+
     fprintf( file, "( <%s> ", node->value );
 
     if( node->left )
-        WriteFile( node->left, file );
+        WriteFile( akin, node->left, file );
     else
         fprintf( file, "<nil> " );
     if( node->right )
-        WriteFile( node->right, file );
+        WriteFile( akin, node->right, file );
     else
         fprintf( file, "<nil> " );
 
     fprintf( file, ") " );
-
 }
 
-void RewriteTree( Tree* tree, Node* node, char* right_answer, char* question )
+void RewriteTree( Akin* akin, Node* node, char* right_answer, char* question )
 {
-    InviteNode(tree,node,Left,right_answer);
-    InviteNode(tree,node,Right,node->value);
+    assert( akin );
+
+    if( !node ) 
+    {
+        akin->tree->errors |= NODE_PTR_IS_NULL;
+        return;
+    }
+
+    InviteNode( akin->tree, node, Left, right_answer );
+    InviteNode( akin->tree, node, Right, node->value );
     node->value = question;
-    FILE* file = fopen( "test1.txt", "w" );
-    WriteFile( tree->root, file );
+
+    if( !akin->output )
+    {
+        akin->errors |= CANT_OPEN_FILE;
+        return;
+    }
+    WriteFile( akin, akin->tree->root, akin->output );
 }
 
-void GuessMode( Tree* tree )
+void GuessMode( Akin* akin )
 {
-    Node* node = tree->root;
+    assert( akin );
+
+    AkinatorDump( akin, akin->log, "guess" );
+    Node* node = akin->tree->root;
+    if( !node ) 
+    {
+        akin->tree->errors |= TREE_ROOT_IS_NULL;
+        return;
+    }
     char* answers = ( char* )calloc( 5, sizeof( char ) );
     while( node->left && node->right )
     {
-        printf("%s (yes/no/exit)\n",node->value);
+        printf( "%s (yes/no/exit)\n", node->value );
         scanf( "%s", answers );
         if( !strcmp( answers, "yes" ) )
             node = node->left;
@@ -147,49 +203,59 @@ void GuessMode( Tree* tree )
     char* answer = ( char* )calloc( 5, sizeof( char ) );
     while( strcmp( answer, "yes" ) && strcmp( answer, "no" ) && strcmp( answer, "exit" ) )
     {
-        printf("Это:  %s ?  (yes/no/exit) \n",node->value);
+        printf( "Это:  %s ?  (yes/no/exit) \n",node->value );
         scanf( "%s", answer );
         if( !strcmp( answer, "yes" ) )
-            printf("Юхуууу я угадала!!\n");
+            printf( "Юхуууу я угадала!!\n" );
         else if( !strcmp( answer, "no" ) )
         {
-            printf("Жалко. А что было загадано?\n");
+            printf( "Жалко. А что было загадано?\n" );
             char* right_answer = ( char* )calloc( 100, sizeof( char ) );
             scanf( "%s", right_answer );
 
-            printf("Чем «%s» отличается от «%s» ?\n",right_answer,node->value);
+            printf( "Чем «%s» отличается от «%s» ?\n", right_answer,node->value );
             char* question = ( char* )calloc( 500, sizeof( char ) );
             char* part_of_question = ( char* )calloc( 50, sizeof( char ) );
-            scanf("%s%[^\n]",question, part_of_question);
-            strcat(question, part_of_question);
+            scanf( "%s%[^\n]", question, part_of_question );
+            strcat( question, part_of_question );
             question = ( char* )realloc( question, strlen( question ) );
             free( part_of_question );
 
             answer = ( char* )calloc( 4, sizeof( char ) );
             while( strcmp( answer, "yes" ) && strcmp( answer, "no" ) )
             {
-                printf("Супер, я запомнила. Хочешь записать новые данные?  (yes/no)\n");
+                printf( "Супер, я запомнила. Хочешь записать новые данные?  (yes/no)\n" );
                 scanf( "%s", answer );
                 if( !strcmp( answer, "yes" ) )
-                    RewriteTree( tree, node, right_answer, question );
+                    RewriteTree( akin, node, right_answer, question );
                 else if( !strcmp( answer, "no" ) )
-                    printf("Хорошо. Надеюсь тебе понравилась игра<3\n");
+                    printf( "Хорошо. Надеюсь тебе понравилась игра<3\n" );
                 else
-                    printf("Я тебя не понимаю. Попробуй снова:(\n");
+                    printf( "Я тебя не понимаю. Попробуй снова:(\n" );
             }
-
         }
         else if( !strcmp( answer, "exit" ) )
             return;
         else
-            printf("Я тебя не понимаю. Попробуй снова:(\n");
+            printf( "Я тебя не понимаю. Попробуй снова:(\n" );
     }
-
+    AkinatorDump( akin, akin->log, "guess" );
 }
 
-void GetWayToNode( Node* node, Stack* stack, Stack* stack_of_answers, char* value, int* is_find )
+void GetWayToNode( Akin* akin, Node* node, Stack* stack, Stack* stack_of_answers, char* value, int* is_find )
 {
-    assert( stack );
+    assert( akin );
+
+    if( !stack ) 
+    {
+        akin->errors |= STACK_PTR_IS_NULL;
+        return;
+    }
+    if( !node ) 
+    {
+        akin->tree->errors |= NODE_PTR_IS_NULL;
+        return;
+    }
 
     if( !strcmp( node->value, value ) )
         *is_find = 1;
@@ -200,7 +266,7 @@ void GetWayToNode( Node* node, Stack* stack, Stack* stack_of_answers, char* valu
         {
             if( stack_of_answers ) StackPush( stack_of_answers, "yes" );
             
-            GetWayToNode( node->left, stack, stack_of_answers, value, is_find );
+            GetWayToNode( akin, node->left, stack, stack_of_answers, value, is_find );
             if( !(*is_find) )
             {
                 StackPop( stack );
@@ -211,7 +277,7 @@ void GetWayToNode( Node* node, Stack* stack, Stack* stack_of_answers, char* valu
         {
             if( stack_of_answers ) StackPush( stack_of_answers, "no" );
             
-            GetWayToNode( node->right, stack, stack_of_answers, value, is_find );
+            GetWayToNode( akin, node->right, stack, stack_of_answers, value, is_find );
             if( !(*is_find) )
             {
                 StackPop( stack );
@@ -221,18 +287,30 @@ void GetWayToNode( Node* node, Stack* stack, Stack* stack_of_answers, char* valu
     }
 }
 
-void BalanceStack( Stack* bigger_stack, Stack* smaller_stack, Stack* stack_of_answers )
+void BalanceStack( Akin* akin, Stack* bigger_stack, Stack* smaller_stack, Stack* stack_of_answers )
 {
+    assert( akin );
+
+    if( !bigger_stack ) 
+    {
+        akin->errors |= STACK_PTR_IS_NULL;
+        return;
+    }
+    if( !smaller_stack ) 
+    {
+        akin->errors |= STACK_PTR_IS_NULL;
+        return;
+    }
     do
     {
         StackPop( bigger_stack );
         if( stack_of_answers ) StackPop( stack_of_answers );
     } while ( bigger_stack->size > smaller_stack->size );
-    
 }
 
 char* StrWithOutQuestionMarkAndFace( char* str )
 {
+    assert( str );
     for( int i = 0; i < strlen( str ); i++ )
         if ( str[i] == ' ' ) 
         {
@@ -250,13 +328,16 @@ char* StrWithOutQuestionMarkAndFace( char* str )
 
 void WriteDifferences( char* value1, char* value2, char* difference )
 {
+    assert( value1 && value2 && difference );
     difference = StrWithOutQuestionMarkAndFace( difference );
     printf( "\n%s не %s, а %s %s\n", value1, difference, value2, difference);
 }
 
-void CompareMode( Tree* tree )
+void CompareMode( Akin* akin )
 {
-    
+    assert( akin );
+
+    AkinatorDump( akin, akin->log, "compare" );
     Stack stack1 = {};
     Stack stack2 = {};
     Stack stack_of_answers = {};
@@ -268,29 +349,34 @@ void CompareMode( Tree* tree )
     char* value1 = ( char* )calloc( 500, sizeof( char ) );
     char* value2 = ( char* )calloc( 500, sizeof( char ) );
 
-    printf("Введи первого человека:\n");
+    printf( "Введи первого человека:\n" );
     scanf( "%s", value1 );
-    printf("Введи второго человека:\n");
+    printf( "Введи второго человека:\n" );
     scanf( "%s", value2 );
 
     if( !strcmp( value1,value2 ) )
         return;//все с кайфом
     
-    GetWayToNode( tree->root, &stack1, &stack_of_answers, value1, &is_find );
+    GetWayToNode( akin, akin->tree->root, &stack1, &stack_of_answers, value1, &is_find );
     if( !is_find ) 
-        return;//ошибка
+    {
+        akin->errors |= INCORRECT_INPUT_ERROR;
+        return;
+    }
 
     is_find = 0;
 
-    GetWayToNode( tree->root, &stack2, NULL, value2, &is_find );
+    GetWayToNode( akin, akin->tree->root, &stack2, NULL, value2, &is_find );
     if( !is_find ) 
-        return;//ошибка
-
+    {
+        akin->errors |= INCORRECT_INPUT_ERROR;
+        return;
+    }
     
     if( stack1.size > stack2.size )
-        BalanceStack( &stack1, &stack2, &stack_of_answers );
+        BalanceStack( akin, &stack1, &stack2, &stack_of_answers );
     else if( stack1.size < stack2.size )
-        BalanceStack( &stack2, &stack1, NULL );
+        BalanceStack( akin, &stack2, &stack1, NULL );
     
     char* pop1 = ( char* )calloc( 500, sizeof( char ) );
     char* pop2 = ( char* )calloc( 500, sizeof( char ) );
@@ -307,13 +393,21 @@ void CompareMode( Tree* tree )
     else if( !strcmp( answer, "no" ) )
         WriteDifferences( value1, value2, pop1 );
     else
-        return;//ошибка
-    //StackDtor();
-    
+    {
+        akin->errors |= INCORRECT_INPUT_ERROR;
+        return;
+    }
+    StackDtor( &stack1 );
+    StackDtor( &stack2 );
+    StackDtor( &stack_of_answers );
+    AkinatorDump( akin, akin->log, "compare" );
 }
 
-void InfoMode( Tree* tree )
+void InfoMode( Akin* akin )
 {
+    assert( akin );
+
+    AkinatorDump( akin, akin->log, "info" );
     Stack stack = {};
     Stack stack_of_answers = {};
     int is_find = 0;
@@ -324,33 +418,75 @@ void InfoMode( Tree* tree )
     printf("Введи, чью информацию хочешь узнать:\n");
     scanf( "%s", value );
 
-    GetWayToNode( tree->root, &stack, &stack_of_answers, value, &is_find );
+    GetWayToNode( akin, akin->tree->root, &stack, &stack_of_answers, value, &is_find );
     if( !is_find ) 
-        return;//ошибка
+    {
+        akin->errors |= INCORRECT_INPUT_ERROR;
+        return;
+    }
 
     char* question = ( char* )calloc( 500, sizeof( char ) );
     char* answer = ( char* )calloc( 500, sizeof( char ) );
 
     while( stack.size )
     {
-        printf("%s ",value);
-        StackPop(&stack,&question);
-        StackPop(&stack_of_answers,&answer);
+        printf( "%s ",value );
+        StackPop( &stack,&question );
+        StackPop( &stack_of_answers, &answer );
         if(!strcmp( answer, "no" ))
             printf("не ");
         else if( strcmp( answer, "yes" ) )
-            return;//ошибка
-        printf("%s\n",StrWithOutQuestionMarkAndFace(question));
+        {
+            akin->errors |= INCORRECT_INPUT_ERROR;
+            return;
+        }
+        printf( "%s\n",StrWithOutQuestionMarkAndFace( question ) );
     }
-
+    StackDtor( &stack );
+    StackDtor( &stack_of_answers );
+    AkinatorDump( akin, akin->log, "info" );
 }
 
-void Game()
+void AkiCtor( Akin* akin, const char* input, const char* output )
 {
-    Tree tree = {};
-    TreeCtor( &tree );
+    assert( akin );
 
-    ReadFile( &tree, "test.txt");
+    akin->tree = ( Tree* )calloc( 1, sizeof( Tree ) );;
+    TreeCtor( akin->tree );
+
+    akin->log =  fopen( "akinlog.txt", "wb" );
+    akin->output = fopen( output, "wb" );
+    akin->input = fopen( input, "r" );
+    akin->file_size = 0;
+    akin->buffer = "";
+
+    if( !akin->input && !akin->output )
+        akin->errors = CANT_OPEN_FILE;
+    else 
+        akin->errors = GAME_IS_OK;
+}
+
+void AkiDtor( Akin* akin )
+{
+    assert( akin );
+
+    TreeDtor( akin->tree );
+    fclose( akin->log );
+    fclose( akin->input );
+    akin->file_size = -1;
+    free( akin->buffer );
+    akin->buffer = NULL;
+    fclose( akin->output );
+    akin->errors = -1;
+}
+
+void Game( const char* input, const char* output )
+{
+
+    Akin akin ={};
+    AkiCtor( &akin, input, output );
+
+    ReadFile( &akin );
     
     printf("Привееет, добро пожаловать в мою игру акинатор<3\n");
     
@@ -358,27 +494,83 @@ void Game()
     char* play_again = ( char* )calloc( 5, sizeof( char ) );
     do
     {
+        AkinatorDump( &akin, akin.log, "choose" );
         printf("Выбери режим, в который ты хочешь поиграть:   (Guess/Compare/Info)\n");
         scanf( "%s", mode );
         if( !strcmp( mode, "Guess" ) )
-            GuessMode( &tree );
+            GuessMode( &akin );
         else if( !strcmp( mode, "Compare" ) )
-            CompareMode( &tree );
+            CompareMode( &akin );
         else if( !strcmp( mode, "Info" ) )
-            InfoMode( &tree );
+            InfoMode( &akin );
         else
-            return;//ошибка
-        printf("\nХочешь поиграть еще?  (yes/no)\n");
+        {
+            akin.errors |= INCORRECT_INPUT_ERROR;
+            break;
+        }
+        printf( "\nХочешь поиграть еще?  (yes/no)\n" );
         scanf( "%s", play_again );
+        AkinatorDump( &akin, akin.log, "choose" );
         if( !strcmp( play_again, "no" ) )
-            printf("Хорошо, спасибо, что поиграл/а. Люблю целую:)\n");
+            printf( "Хорошо, спасибо, что поиграл/а. Люблю целую:)\n" );
         else if( strcmp( play_again, "yes" ) )
-            return;//ошибка
+        {
+            akin.errors |= INCORRECT_INPUT_ERROR;
+            break;
+        }
     } while ( !strcmp( play_again, "yes" ) );
-    
-    TreeDump( &tree, tree.log );
 
-    //FILE* file = fopen( "test1.txt", "w" );
-    //WriteFile( tree.root, file );
+    AkiDtor( &akin );
+}
 
+int AkinVerify( Akin* akin )
+{
+    if( akin == NULL )
+        return AKIN_IS_NULL;
+    if( !akin->input && !akin->output )
+        return CANT_OPEN_FILE;
+    return GAME_IS_OK;
+}
+
+int AkinatorDump( Akin* akin, FILE* logger, char* mode )
+{
+    assert( akin );
+
+    int status = AkinVerify( akin );
+
+    static size_t number_of_call = 1;
+
+	fprintf( logger, "=======================================\nAKINATOR DUMP CALL #%zu\nMode: %s\n", number_of_call, mode );
+    if ( status || akin->errors )
+	{
+		fprintf( logger, "-------------ERRORS------------\n" );
+		if ( status & AKIN_IS_NULL )
+		{
+			fprintf( logger, "GAME POINTER IS NULL\n" );
+			return 0;
+		}
+        TreeDump( akin->tree, akin->tree->log );
+        if ( akin->errors & INCORRECT_INPUT_ERROR ) fprintf( logger, "USER INPUT INCORRECT DATA\n" );
+		if ( akin->errors & INCORRECT_FILE_DATA ) fprintf( logger, "DATA IN FILE IS INCORRECT\n" );
+		if ( akin->errors & FILESIZE_IS_ZERO ) fprintf( logger, "SIZE OF FILE IS ZERO OR NEGATIVE\n" );
+	    if ( akin->errors & CANT_OPEN_FILE ) fprintf( logger, "FILE CANT BE OPENED\n");
+	    if ( akin->errors & POINTER_OF_BUF_IS_NEGATIVE ) fprintf( logger, "POINTER OF BUF IS NEGATIVE \n" );
+        if ( akin->errors & STACK_PTR_IS_NULL ) fprintf( logger, "STACK IS NULL \n" );
+
+		fprintf( logger, "----------END_OF_ERRORS--------\n" );
+	}
+	else
+    {
+		fprintf( logger, "------------NO_ERRORS----------\n" );
+        fprintf( logger, "Current Pre-tree\n" );
+
+        WriteFile( akin, akin->tree->root, logger );
+        fprintf( logger, "\n" );
+
+        TreeDump( akin->tree, akin->tree->log );
+    }
+	fprintf( logger, "=======================================\n\n" );
+	number_of_call++;
+
+    return status;
 }

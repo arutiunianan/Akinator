@@ -1,6 +1,6 @@
 # Анинатор
 
-<image src="for_readme/akinator.jpeg" width=600px>
+<image src="for_readme/akinator.jpeg" width=700px>
 
 ## Что он делает?
 Этот проект является моей реализацией известной игры Akinator! 
@@ -22,7 +22,7 @@
 ```
 можно построить дерево:
 
-<image src="tree/dump.png" width=600px>
+<image src="tree/dump.png" width=700px>
 
 ### 2. Игра
 

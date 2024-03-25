@@ -1,6 +1,6 @@
 # Анинатор
 
-<image src="for_readme/akinator.jpeg" width=350px>
+<image src="for_readme/akinator.jpeg" width=600px>
 
 ## Что он делает?
 Этот проект является моей реализацией известной игры Akinator! 
@@ -83,7 +83,7 @@ make clean
 ## Как выглядит результат работы программы?
 Пример результата работы режима Guess:
 
-<image src="for_readme/console1.png" width=400px>
+<image src="for_readme/console1.png" width=500px>
 
 Пример результата работы режима Compare:
 
@@ -91,4 +91,4 @@ make clean
 
 Пример результата работы режима Info:
 
-<image src="for_readme/console3.png" width=400px>
+<image src="for_readme/console3.png" width=500px>
